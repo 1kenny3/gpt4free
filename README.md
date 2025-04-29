@@ -1,3 +1,41 @@
+# Telegram Бот для Генерации Изображений
+
+Этот бот использует g4f для генерации изображений через Telegram.
+
+## Установка
+
+1. Клонируйте репозиторий:
+```bash
+git clone https://github.com/yourusername/tg-image-generator-bot.git
+cd tg-image-generator-bot
+```
+
+2. Установите зависимости:
+```bash
+pip install -r requirements.txt
+```
+
+3. Создайте файл `.env` и добавьте в него токен вашего бота:
+```bash
+BOT_TOKEN=your_telegram_bot_token_here
+```
+
+## Запуск
+
+```bash
+python bot.py
+```
+
+## Использование
+
+1. Отправьте команду `/start` для начала работы с ботом
+2. Используйте команду `/generate` с описанием желаемого изображения
+   Например: `/generate красивый закат над морем`
+
+## Примечание
+
+Бот использует модель cinematic_art для генерации изображений.
+
 <a href="https://trendshift.io/repositories/1692" target="_blank"><img src="https://trendshift.io/api/badge/repositories/1692" alt="xtekky%2Fgpt4free | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
 ---

@@ -20,3 +20,6 @@ nodriver
 python-multipart
 pypdf2
 python-docx
+aiogram==3.3.0
+g4f[all]
+python-dotenv==1.0.0
