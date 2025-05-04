@@ -8,7 +8,7 @@ from g4f.client import Client
 from dataclasses import dataclass
 from typing import Dict
 import g4f
-from g4f.Provider import FreeGpt
+from g4f.Provider import FreeGpt, DeepInfraChat
 from aiogram.enums import ChatAction
 
 # Настройка логирования
@@ -155,8 +155,16 @@ def get_models_list_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # Системный промпт для русского языка
-SYSTEM_PROMPT = """Ты — русскоязычный ассистент. Общайся только на русском языке.
-Отвечай кратко, но информативно. Будь дружелюбным и полезным."""
+SYSTEM_PROMPT = """Ты — русскоязычный ассистент по имени Помощник. 
+ВАЖНО: Используй ТОЛЬКО русский язык для общения.
+НИКОГДА не отвечай на других языках.
+Твой стиль общения:
+- Дружелюбный и вежливый
+- Краткий, но информативный
+- Всегда на русском языке
+- Используешь простые понятные формулировки
+
+Если не можешь ответить на вопрос, скажи об этом на русском языке."""
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
@@ -314,48 +322,42 @@ async def handle_message(message: Message):
         await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
         
         try:
-            # Используем FreeGPT провайдер с русской локализацией
+            # Формируем контекст с принудительным использованием русского языка
+            context = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": "Ты должен отвечать только на русском языке."},
+                {"role": "assistant", "content": "Да, я буду отвечать исключительно на русском языке."},
+                {"role": "user", "content": "Проверка: скажи что-нибудь"},
+                {"role": "assistant", "content": "Конечно! Я говорю на чистом русском языке и готов помочь вам."},
+                {"role": "user", "content": message.text}
+            ]
+            
+            # Используем DeepInfraChat провайдер
             response = await asyncio.to_thread(
                 g4f.ChatCompletion.create,
-                model=None,
-                provider=FreeGpt,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": "Отвечай на русском языке"},
-                    {"role": "assistant", "content": "Хорошо, я буду отвечать только на русском языке."},
-                    {"role": "user", "content": message.text}
-                ],
+                model="deepseek-ai/DeepSeek-V3",  # Используем модель DeepSeek
+                provider=DeepInfraChat,
+                messages=context,
                 stream=False
             )
             
-            if response:
-                # Проверяем, что ответ на русском
-                if any(ord(char) > 127 for char in response):  # Если есть не-ASCII символы
+            if response and isinstance(response, str):
+                # Проверяем наличие русских символов в ответе
+                if any(ord(char) >= 1040 and ord(char) <= 1103 for char in response):
                     await message.reply(response)
                 else:
-                    await message.reply("Извините, произошла ошибка. Попробую ответить снова, но уже на русском.")
-                    # Повторная попытка с явным указанием языка
-                    response = await asyncio.to_thread(
-                        g4f.ChatCompletion.create,
-                        model=None,
-                        provider=FreeGpt,
-                        messages=[
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user", "content": f"Ответь на русском языке на вопрос: {message.text}"}
-                        ],
-                        stream=False
-                    )
-                    await message.reply(response if response else "Извините, не удалось получить ответ на русском языке.")
+                    # Если ответ не на русском, отправляем заготовленное сообщение
+                    await message.reply("Извините, произошла ошибка. Пожалуйста, повторите ваш вопрос.")
             else:
                 await message.reply("Извините, не удалось получить ответ. Попробуйте переформулировать вопрос.")
                 
         except Exception as e:
             logging.error(f"Error getting response from model: {str(e)}")
-            await message.reply("Извините, произошла ошибка при получении ответа. Попробуйте позже.")
+            await message.reply("Произошла ошибка при получении ответа. Пожалуйста, попробуйте позже.")
             
     except Exception as e:
         logging.error(f"Error in message handler: {str(e)}")
-        await message.reply("Извините, произошла ошибка при обработке сообщения.")
+        await message.reply("Произошла ошибка при обработке сообщения.")
 
 async def main():
     await dp.start_polling(bot)
