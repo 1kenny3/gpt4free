@@ -7,6 +7,9 @@ from config import BOT_TOKEN
 from g4f.client import Client
 from dataclasses import dataclass
 from typing import Dict
+import g4f
+from g4f.Provider import FreeGpt
+from aiogram.enums import ChatAction
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -151,15 +154,19 @@ def get_models_list_keyboard() -> InlineKeyboardMarkup:
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+# Системный промпт для русского языка
+SYSTEM_PROMPT = """Ты — русскоязычный ассистент. Общайся только на русском языке.
+Отвечай кратко, но информативно. Будь дружелюбным и полезным."""
+
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     await message.answer(
-        "🎨 Привет! Я бот для генерации изображений.\n"
-        "Используй команду /generate с описанием желаемого изображения.\n\n"
+        "👋 Привет! Я бот с двумя основными функциями:\n\n"
+        "1️⃣ Генерация изображений через /generate\n"
+        "2️⃣ Общение с AI - просто напишите сообщение\n\n"
         "Примеры команд:\n"
         "• /generate закат над городом\n"
-        "• /generate anime девушка с мечом\n"
-        "• /generate realistic портрет человека\n\n"
+        "• Или просто задайте вопрос для общения\n\n"
         "📚 Список всех стилей: /models\n"
         "🆘 Помощь: /help"
     )
@@ -168,13 +175,13 @@ async def cmd_start(message: Message):
 async def cmd_help(message: Message):
     await message.answer(
         "🆘 Справка по использованию бота:\n\n"
-        "1. Для начала работы введите /generate [ваш запрос]\n"
-        "2. Выберите стиль из предложенных вариантов\n"
-        "3. Дождитесь генерации изображения (обычно 10-30 секунд)\n\n"
-        "🖼️ Можно сразу указать стиль в команде:\n"
-        "Пример: /generate anime лесной эльф\n\n"
-        "📚 Список всех стилей: /models\n"
-        "⏳ История генераций: /history (скоро)"
+        "1. Генерация изображений:\n"
+        "   • Используйте /generate [описание]\n"
+        "   • Выберите стиль из предложенных\n\n"
+        "2. Общение с AI:\n"
+        "   • Просто напишите сообщение\n"
+        "   • Бот ответит на ваш вопрос\n\n"
+        "📚 Список стилей для генерации: /models"
     )
 
 @dp.message(Command("generate"))
@@ -292,6 +299,63 @@ async def model_info_callback(callback_query: CallbackQuery):
         parse_mode="HTML",
         reply_markup=get_models_list_keyboard()
     )
+
+@dp.message()
+async def handle_message(message: Message):
+    """
+    Обработчик текстовых сообщений для общения с AI
+    """
+    # Если это команда generate, пропускаем
+    if message.text.startswith('/generate'):
+        return
+        
+    try:
+        # Отправляем индикатор набора текста
+        await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+        
+        try:
+            # Используем FreeGPT провайдер с русской локализацией
+            response = await asyncio.to_thread(
+                g4f.ChatCompletion.create,
+                model=None,
+                provider=FreeGpt,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": "Отвечай на русском языке"},
+                    {"role": "assistant", "content": "Хорошо, я буду отвечать только на русском языке."},
+                    {"role": "user", "content": message.text}
+                ],
+                stream=False
+            )
+            
+            if response:
+                # Проверяем, что ответ на русском
+                if any(ord(char) > 127 for char in response):  # Если есть не-ASCII символы
+                    await message.reply(response)
+                else:
+                    await message.reply("Извините, произошла ошибка. Попробую ответить снова, но уже на русском.")
+                    # Повторная попытка с явным указанием языка
+                    response = await asyncio.to_thread(
+                        g4f.ChatCompletion.create,
+                        model=None,
+                        provider=FreeGpt,
+                        messages=[
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": f"Ответь на русском языке на вопрос: {message.text}"}
+                        ],
+                        stream=False
+                    )
+                    await message.reply(response if response else "Извините, не удалось получить ответ на русском языке.")
+            else:
+                await message.reply("Извините, не удалось получить ответ. Попробуйте переформулировать вопрос.")
+                
+        except Exception as e:
+            logging.error(f"Error getting response from model: {str(e)}")
+            await message.reply("Извините, произошла ошибка при получении ответа. Попробуйте позже.")
+            
+    except Exception as e:
+        logging.error(f"Error in message handler: {str(e)}")
+        await message.reply("Извините, произошла ошибка при обработке сообщения.")
 
 async def main():
     await dp.start_polling(bot)
